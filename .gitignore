@@ -21,3 +21,13 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# local env and artifacts
+.env
+*.log
+*.zip
+
+# backend generated artifacts
+backend-auth/.m2/
+backend-auth/target/
+backend-auth/tmp-*.json

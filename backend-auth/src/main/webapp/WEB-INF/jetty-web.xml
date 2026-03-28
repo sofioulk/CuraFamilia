@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://jetty.org/configure_10_0.dtd">
+<Configure class="org.eclipse.jetty.ee10.webapp.WebAppContext">
+    <Set name="tempDirectory">
+        <New class="java.io.File">
+            <Arg><Property name="jetty.base" default="."/></Arg>
+            <Arg>target/jetty-webapp-temp</Arg>
+        </New>
+    </Set>
+    <Call name="setAttribute">
+        <Arg>jakarta.servlet.context.tempdir</Arg>
+        <Arg>
+            <New class="java.io.File">
+                <Arg><Property name="jetty.base" default="."/></Arg>
+                <Arg>target/jetty-webapp-temp</Arg>
+            </New>
+        </Arg>
+    </Call>
+    <Call name="setAttribute">
+        <Arg>javax.servlet.context.tempdir</Arg>
+        <Arg>
+            <New class="java.io.File">
+                <Arg><Property name="jetty.base" default="."/></Arg>
+                <Arg>target/jetty-webapp-temp</Arg>
+            </New>
+        </Arg>
+    </Call>
+</Configure>
