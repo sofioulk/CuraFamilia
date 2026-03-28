@@ -36,7 +36,7 @@ export default function Welcome({ onLogin, onRegister }) {
           <div style={{ flex: 1, height: 1, background: T.teal100 }} />
         </div>
 
-        <button onClick={onLogin} style={{ width: "100%", padding: "14px 24px", background: "white", border: `1.5px solid ${T.teal100}`, borderRadius: 14, fontSize: 14, fontWeight: 500, color: T.textLight, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, transition: "all 0.2s" }}>
+        <button onClick={() => alert("La connexion simplifiée par Code de Liaison arrive bientôt !")} style={{ width: "100%", padding: "14px 24px", background: "white", border: `1.5px solid ${T.teal100}`, borderRadius: 14, fontSize: 14, fontWeight: 500, color: T.textLight, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, transition: "all 0.2s" }}>
           <Icon.Shield />
           <span style={{ color: T.navy }}>Interface Senior</span>
         </button>

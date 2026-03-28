@@ -14,7 +14,7 @@ import {
 } from "../../services/homeApi";
 
 export const ROLES = [
-  { id: "famille", icon: <Icon.Users />, label: "Membre de la famille", desc: "Je gère les médicaments de mes proches âgés" },
+  { id: "famille", icon: <Icon.Users />, label: "Membre de la famille", desc: "Je gÃ¨re les mÃ©dicaments de mes proches Ã¢gÃ©s" },
   { id: "senior", icon: <Icon.Heart />, label: "Senior", desc: "Je suis la personne suivie par ma famille" },
 ];
 
@@ -58,7 +58,7 @@ function getNextReturnLabel(medications = []) {
 
   if (!firstTime) return "";
   const formattedTime = formatTimeSlotLabel(firstTime);
-  return formattedTime ? `Demain à ${formattedTime}` : "Demain";
+  return formattedTime ? `Demain Ã  ${formattedTime}` : "Demain";
 }
 
 function getTakeActionAvailabilityLabel(value) {
@@ -214,30 +214,24 @@ function scheduleAssistantPrefill(message, attempt = 0) {
 }
 
 function CheckinBars({ variant = "balanced", active = false }) {
-  const color = active ? T.primary : "#2f857c";
-  const heightsByVariant = {
-    positive: [8, 12, 16],
-    balanced: [9, 14, 9],
-    difficult: [16, 11, 7],
+  const map = {
+    positive: "😁",
+    balanced: "😐",
+    difficult: "😔",
   };
-  const heights = heightsByVariant[variant] || heightsByVariant.balanced;
-  const maxHeight = Math.max(...heights);
-
   return (
-    <span style={{ display: "inline-flex", alignItems: "flex-end", gap: 4, height: 16 }}>
-      {heights.map((height, index) => {
-        const ratio = maxHeight ? height / maxHeight : 0;
-        const opacity = active
-          ? (0.4 + ratio * 0.55)
-          : (0.3 + ratio * 0.5);
-        return (
-          <span
-            // Height-driven opacity ensures the tallest bar is always the "greenest".
-            key={`${variant}-${index}`}
-            style={{ width: 5, height, borderRadius: 999, background: color, opacity }}
-          />
-        );
-      })}
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 22,
+        opacity: active ? 1 : 0.4,
+        filter: active ? "none" : "grayscale(100%)",
+        transition: "all 0.2s ease"
+      }}
+    >
+      {map[variant]}
     </span>
   );
 }
@@ -389,11 +383,11 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
   const homeGreeting = currentHour >= 18 || currentHour < 5 ? "Bonsoir" : "Bonjour";
   const nextMedicationTitle = nextMed
     ? nextMed.name
-    : (loadingHome ? "Chargement..." : (hasMedicationsToday ? "Toutes les prises complétées" : "Aucun médicament prévu"));
+    : (loadingHome ? "Chargement..." : (hasMedicationsToday ? "Toutes les prises complÃ©tÃ©es" : "Aucun mÃ©dicament prÃ©vu"));
   const nextMedicationDosage = normalizeDosage(nextMed?.dosage);
   const nextMedicationSubtitle = nextMed
     ? (nextMedicationDosage ? `${nextMedicationDosage} - ${nextMed.time}` : nextMed.time)
-    : (loadingHome ? "Veuillez patienter..." : (hasMedicationsToday ? "Toutes les prises du jour sont enregistrées." : "Aucun traitement à prendre aujourd'hui."));
+    : (loadingHome ? "Veuillez patienter..." : (hasMedicationsToday ? "Toutes les prises du jour sont enregistrÃ©es." : "Aucun traitement Ã  prendre aujourd'hui."));
   const minutesUntilNextMedication = getMinutesUntil(nextMed?.scheduledAt, nowTick);
   const canShowTakeMedicationButton = hasRemainingMedication
     && (minutesUntilNextMedication == null || minutesUntilNextMedication <= 30);
@@ -401,7 +395,7 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
     ? getTakeActionAvailabilityLabel(nextMed?.scheduledAt)
     : "";
   const nextMedicationInfoText = hasRemainingMedication
-    ? (loadingHome ? "Mise à jour des prises..." : takeButtonAvailabilityLabel)
+    ? (loadingHome ? "Mise Ã  jour des prises..." : takeButtonAvailabilityLabel)
     : "";
   const nextReturnLabel = getNextReturnLabel(meds);
   const nextMedicationCountdown = nextMed
@@ -411,17 +405,17 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
     ? 0
     : (remainingMedicationCount === 0 ? 3 : (takenMedicationCount > 0 ? 2 : 1));
   const heroProgressLabel = loadingHome
-    ? "Mise à jour de votre journée..."
+    ? "Mise Ã  jour de votre journÃ©e..."
     : (!hasMedicationsToday
-      ? "Aucun traitement prévu aujourd'hui."
+      ? "Aucun traitement prÃ©vu aujourd'hui."
       : `Prise ${takenMedicationCount} sur ${meds.length} aujourd'hui`);
   const homeSubtitle = hasMedicationsToday
     ? (remainingMedicationCount === 0
-      ? "Toutes vos prises du jour sont complètes."
+      ? "Toutes vos prises du jour sont complÃ¨tes."
       : `Vous avez ${remainingMedicationCount} prise${remainingMedicationCount > 1 ? "s" : ""} restante${remainingMedicationCount > 1 ? "s" : ""} aujourd'hui.`)
     : (currentHour < 12
-      ? "Prenons soin de votre journée, pas à pas."
-      : "Aucune prise prévue aujourd'hui.");
+      ? "Prenons soin de votre journÃ©e, pas Ã  pas."
+      : "Aucune prise prÃ©vue aujourd'hui.");
 
   const handleTakeMedication = async () => {
     if (!seniorId || !nextMed?.medicationId || takingMed) {
@@ -488,7 +482,7 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
         delete nextState[questionValue];
         return nextState;
       });
-      setActionError(error?.message || "Impossible d'envoyer la réponse.");
+      setActionError(error?.message || "Impossible d'envoyer la rÃ©ponse.");
     } finally {
       setSubmittingCheckinQuestion("");
     }
@@ -1058,3 +1052,5 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
     </Phone>
   );
 }
+
+

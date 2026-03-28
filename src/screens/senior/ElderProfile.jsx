@@ -3,6 +3,7 @@ import { T } from "../../styles/theme";
 import { Icon } from "../../components/icons/Icons";
 import { Phone } from "../../components/ui/Phone";
 import { BottomNav } from "../../components/senior/BottomNav";
+import { getSeniorProfile, parseSeniorIdFromUser } from "../../services/homeApi";
 
 const PAGE_TITLE_FONT = "'DM Serif Display', serif";
 
@@ -128,9 +129,6 @@ export default function ElderProfile({ user, onNavigate = () => {} }) {
       }
       try {
         setLoading(true);
-        // homeApi is dynamically imported here to avoid top-level require cycles if any 
-        // (assuming src/services/homeApi matches this path)
-        const { getSeniorProfile, parseSeniorIdFromUser } = await import("../../services/homeApi");
         const parsedId = parseSeniorIdFromUser(user);
         if (!parsedId) {
           throw new Error("ID senior invalide.");
@@ -276,7 +274,7 @@ export default function ElderProfile({ user, onNavigate = () => {} }) {
           <InfoRow label={"M\u00E9decin traitant"} value={p.mainDoctorName || "Non d\u00E9fini"} />
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
-            <Tag success>Traitements suivis</Tag>
+            <Tag tone="success">Traitements suivis</Tag>
             <Tag>Rappels actifs</Tag>
           </div>
         </SectionCard>

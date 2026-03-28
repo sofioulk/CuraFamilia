@@ -7,8 +7,7 @@ export function FamilyBottomNav({ activeTab, onNavigate }) {
     { id: "family_dashboard", icon: Icon.LayoutDashboard, label: "Accueil" },
     { id: "family_health", icon: Icon.Pill, label: "Santé" },
     { id: "family_assistant", icon: Icon.Bot, label: "Assistant" },
-    { id: "family_calendar", icon: Icon.Calendar, label: "Agenda" },
-    { id: "family_settings", icon: Icon.Settings, label: "Réglages" }
+    { id: "family_calendar", icon: Icon.Calendar, label: "Agenda" }
   ];
 
   return (

@@ -58,7 +58,7 @@ function SkeletonCard() {
     <div style={{
       background: "linear-gradient(90deg, #f0f4f8 25%, #e2e8f0 50%, #f0f4f8 75%)",
       backgroundSize: "200% 100%",
-      animation: "pulse_shimmer 1.5s infinite",
+      animation: "pulse_shimmer 1.5s linear infinite",
       borderRadius: 16,
       height: 120,
       width: "100%",
@@ -134,17 +134,38 @@ export default function FamilyDashboard({ user, onNavigate }) {
               Aperçu santé de vos proches
             </p>
           </div>
-          <div style={{
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            backgroundColor: T.white,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
-          }}>
-            <Icon.Bell active />
+          <div style={{ display: "flex", gap: 12 }}>
+            <button
+              onClick={() => onNavigate("family_settings")}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: T.white,
+                border: "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                cursor: "pointer",
+                color: T.navy
+              }}
+            >
+              <Icon.Settings active />
+            </button>
+            <div style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: T.white,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              color: T.navy
+            }}>
+              <Icon.Bell active />
+            </div>
           </div>
         </div>
 
