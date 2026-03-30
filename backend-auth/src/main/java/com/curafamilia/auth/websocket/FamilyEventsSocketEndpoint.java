@@ -1,8 +1,12 @@
 package com.curafamilia.auth.websocket;
 
+import java.io.IOException;
+import java.util.Locale;
+
 import com.curafamilia.auth.dto.SocketCommandRequest;
 import com.curafamilia.auth.realtime.SocketSessionRegistry;
 import com.curafamilia.auth.security.AuthenticatedUser;
+
 import jakarta.json.bind.Jsonb;
 import jakarta.json.bind.JsonbBuilder;
 import jakarta.websocket.CloseReason;
@@ -13,8 +17,6 @@ import jakarta.websocket.OnMessage;
 import jakarta.websocket.OnOpen;
 import jakarta.websocket.Session;
 import jakarta.websocket.server.ServerEndpoint;
-import java.io.IOException;
-import java.util.Locale;
 
 @ServerEndpoint(value = "/ws/events", configurator = AuthenticatedSocketConfigurator.class)
 public class FamilyEventsSocketEndpoint {
