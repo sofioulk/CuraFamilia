@@ -1,111 +1,230 @@
-import React from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Phone } from "../../components/ui/Phone";
 import { T } from "../../styles/theme";
 import { FamilyBottomNav } from "../../components/family/FamilyBottomNav";
-import { Icon } from "../../components/icons/Icons";
+import { getSeniorAssistantHistory } from "../../services/homeApi";
+import {
+  formatFamilyDateTime,
+  getEffectiveFamilyUser,
+  getFamilyFirstName,
+  resolveFamilySeniorId,
+} from "./familyUtils";
 
-function AiLog({ title, date, snippet, sentiment, urgency }) {
-  const isUrgent = urgency === "high";
-  const sentimentColor = sentiment === "positive" ? "#10B981" : sentiment === "negative" ? "#EF4444" : "#F59E0B";
-  const sentimentBg = sentiment === "positive" ? "#10B98115" : sentiment === "negative" ? "#EF444415" : "#F59E0B15";
+const PAGE_BODY_FONT = "'DM Sans', sans-serif";
+const PAGE_TITLE_FONT = "'DM Serif Display', serif";
+const ALERT_KEYWORDS = ["mal", "douleur", "fatigue", "vertige", "chute", "sos", "angoisse", "urgent"];
+
+function normalizeSender(value) {
+  const sender = String(value || "").trim().toLowerCase();
+  if (sender === "senior" || sender === "user") return "senior";
+  return "assistant";
+}
+
+function toMessageList(rawMessages = []) {
+  if (!Array.isArray(rawMessages)) return [];
+  return rawMessages
+    .filter((row) => row && typeof row === "object")
+    .map((row, index) => ({
+      id: row?.id ?? `msg-${index}`,
+      sender: normalizeSender(row?.sender),
+      text: String(row?.message || "").trim(),
+      createdAt: row?.createdAt || null,
+    }))
+    .filter((row) => Boolean(row.text));
+}
+
+function getSignalLevel(text) {
+  const normalized = String(text || "").toLowerCase();
+  return ALERT_KEYWORDS.some((keyword) => normalized.includes(keyword)) ? "attention" : "normal";
+}
+
+function JournalCard({ row }) {
+  const isSenior = row.sender === "senior";
+  const signal = getSignalLevel(row.text);
+  const borderColor = signal === "attention" ? "#FECACA" : T.teal100;
 
   return (
-    <div style={{
-      backgroundColor: T.white,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
-      boxShadow: "0 2px 16px rgba(0,0,0,0.03)",
-      border: isUrgent ? `2px solid #EF444450` : `1px solid rgba(0,0,0,0.04)`
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-           <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sentimentColor }} />
-           <span style={{ fontSize: 14, fontWeight: 700, color: T.navy }}>{title}</span>
-         </div>
-         <span style={{ fontSize: 12, color: T.textLight }}>{date}</span>
+    <div
+      style={{
+        background: "white",
+        borderRadius: 16,
+        border: `1.5px solid ${borderColor}`,
+        padding: 14,
+        boxShadow: "0 8px 18px rgba(10,124,113,0.06)",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 99,
+              background: isSenior ? T.primary : "#64748B",
+            }}
+          />
+          <strong style={{ fontSize: 13, color: T.navy }}>{isSenior ? "Senior" : "Assistant IA"}</strong>
+        </div>
+        <span style={{ fontSize: 11, color: T.textLight, fontWeight: 700 }}>{formatFamilyDateTime(row.createdAt)}</span>
       </div>
-      
-      <p style={{ margin: "0 0 16px", fontSize: 14, color: T.text, lineHeight: 1.5, fontStyle: "italic", borderLeft: `3px solid #E2E8F0`, paddingLeft: 12 }}>
-        "{snippet}"
-      </p>
 
-      <div style={{ display: "flex", gap: 8 }}>
-        <span style={{
-          backgroundColor: sentimentBg,
-          color: sentimentColor,
-          padding: "4px 10px",
-          borderRadius: 20,
-          fontSize: 11,
-          fontWeight: 600
-        }}>Analyse: {sentiment === "positive" ? "Serein" : sentiment === "negative" ? "Douleur/Stress" : "Neutre"}</span>
-        
-        {isUrgent && (
-           <span style={{
-            backgroundColor: "#EF444415",
-            color: "#EF4444",
-            padding: "4px 10px",
-            borderRadius: 20,
+      <p style={{ fontSize: 14, color: T.navyLight, lineHeight: 1.55 }}>{row.text}</p>
+
+      {signal === "attention" && (
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            marginTop: 10,
+            padding: "5px 8px",
+            borderRadius: 999,
             fontSize: 11,
-            fontWeight: 700
-          }}>Intervention requise</span>
-        )}
-      </div>
+            fontWeight: 800,
+            background: "#FEF2F2",
+            color: T.danger,
+          }}
+        >
+          Signal a surveiller
+        </span>
+      )}
     </div>
   );
 }
 
-export default function FamilyAssistant({ user, onNavigate }) {
+export default function FamilyAssistant({ user, onNavigate = () => {} }) {
+  const effectiveUser = useMemo(() => getEffectiveFamilyUser(user), [user]);
+  const seniorId = useMemo(() => resolveFamilySeniorId(effectiveUser), [effectiveUser]);
+  const familyName = getFamilyFirstName(effectiveUser?.name, "Famille");
+
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadHistory = useCallback(async () => {
+    if (!seniorId) {
+      setMessages([]);
+      setLoading(false);
+      setError("");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const data = await getSeniorAssistantHistory({ seniorId });
+      const conversation = data?.conversation || {};
+      const rows = toMessageList(conversation?.messages);
+      setMessages(rows.reverse());
+    } catch (apiError) {
+      setMessages([]);
+      setError(apiError?.message || "Impossible de charger le journal assistant.");
+    } finally {
+      setLoading(false);
+    }
+  }, [seniorId]);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  const seniorMessages = messages.filter((row) => row.sender === "senior");
+  const attentionCount = seniorMessages.filter((row) => getSignalLevel(row.text) === "attention").length;
+
   return (
     <Phone>
-      <div style={{ padding: "24px 20px 100px", minHeight: "100vh", backgroundColor: "#F7F9FC", fontFamily: "'Inter', sans-serif" }}>
-        
-        <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 24 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: `${T.primary}20`, display: "flex", justifyContent: "center", alignItems: "center", color: T.primary }}>
-            <Icon.Bot size={24} active />
+      <div style={{ fontFamily: PAGE_BODY_FONT }}>
+        <div style={{ minHeight: "100vh", padding: "16px 16px 110px", color: T.navy }}>
+          <div style={{ animation: "fadeUp .45s both", marginBottom: 14 }}>
+            <h1 style={{ fontFamily: PAGE_TITLE_FONT, fontSize: 28, fontWeight: 400, lineHeight: 1.1, marginBottom: 8 }}>
+              Journal IA
+            </h1>
+            <p style={{ color: T.textLight, fontSize: 14, lineHeight: 1.6 }}>
+              Lecture simple des echanges senior-assistant pour {familyName}.
+            </p>
           </div>
-          <div>
-            <h1 style={{ margin: "0 0 4px", fontSize: 24, fontWeight: 700, color: T.navy }}>Journal IA</h1>
-            <p style={{ margin: 0, fontSize: 14, color: T.textLight }}>Historique des conversations</p>
-          </div>
+
+          {!seniorId && (
+            <div
+              style={{
+                animation: "fadeUp .45s .05s both",
+                background: "white",
+                borderRadius: 20,
+                border: `1.5px solid ${T.teal100}`,
+                padding: 18,
+                boxShadow: "0 10px 22px rgba(10,124,113,0.08)",
+              }}
+            >
+              <h2 style={{ fontSize: 17, fontWeight: 900, marginBottom: 8 }}>Journal indisponible</h2>
+              <p style={{ fontSize: 14, color: T.textLight, lineHeight: 1.55 }}>
+                Associez un proche dans Reglages pour suivre les conversations utiles.
+              </p>
+            </div>
+          )}
+
+          {!!seniorId && (
+            <>
+              <div
+                style={{
+                  animation: "fadeUp .45s .05s both",
+                  background: `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`,
+                  color: "white",
+                  borderRadius: 22,
+                  padding: 16,
+                  marginBottom: 12,
+                  boxShadow: "0 16px 34px rgba(13,148,136,0.24)",
+                }}
+              >
+                <div style={{ fontSize: 12, opacity: 0.84, fontWeight: 800, marginBottom: 7 }}>Resume du journal</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 28, lineHeight: 1, fontWeight: 900 }}>{messages.length}</div>
+                    <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4 }}>messages recents</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 28, lineHeight: 1, fontWeight: 900 }}>{attentionCount}</div>
+                    <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4 }}>signaux a surveiller</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 900, color: T.navy }}>Conversations recentes</h3>
+                <button
+                  onClick={loadHistory}
+                  disabled={loading}
+                  style={{
+                    border: `1px solid ${T.teal100}`,
+                    background: "white",
+                    borderRadius: 10,
+                    color: T.primaryDark,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    padding: "4px 10px",
+                    cursor: loading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {loading ? "Sync..." : "Actualiser"}
+                </button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {loading && <p style={{ fontSize: 13, color: T.textLight }}>Chargement du journal...</p>}
+                {!loading && !!error && <p style={{ fontSize: 13, color: T.danger, fontWeight: 700 }}>{error}</p>}
+                {!loading && !error && !messages.length && (
+                  <p style={{ fontSize: 13, color: T.textLight }}>Aucun message disponible pour le moment.</p>
+                )}
+                {!loading && !error && messages.slice(0, 18).map((row, index) => (
+                  <div key={row.id} style={{ animation: `fadeUp .35s ${index * 0.03}s both` }}>
+                    <JournalCard row={row} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
-        <div style={{ backgroundColor: "#E2E8F060", borderRadius: 12, padding: 16, marginBottom: 24 }}>
-           <p style={{ margin: 0, fontSize: 13, color: T.navy, lineHeight: 1.5 }}>
-             ℹ L'Eldercare IA résume de manière anonyme et confidentielle l'état psychologique et physique de votre proche après chaque discussion.
-           </p>
-        </div>
-
-        <h3 style={{ margin: "0 0 16px", fontSize: 14, textTransform: "uppercase", letterSpacing: 1, color: T.textLight, fontWeight: 600 }}>Aujourd'hui</h3>
-        
-        <AiLog 
-          title="Réveil et Check-in" 
-          date="08:15" 
-          snippet="Bonjour l'assistant, j'ai plutôt bien dormi. Mon dos me fait un peu souffrir ce matin par contre."
-          sentiment="negative"
-          urgency="low"
-        />
-
-        <AiLog 
-          title="Questions Médicaments" 
-          date="13:30" 
-          snippet="Est-ce que j'ai pris mon doliprane ce midi ?"
-          sentiment="neutral"
-          urgency="low"
-        />
-
-        <h3 style={{ margin: "24px 0 16px", fontSize: 14, textTransform: "uppercase", letterSpacing: 1, color: T.textLight, fontWeight: 600 }}>Hier</h3>
-        
-        <AiLog 
-          title="Fin de journée" 
-          date="20:00" 
-          snippet="Tout va bien, j'ai hâte de voir Sofia ce week-end. Je vais me coucher."
-          sentiment="positive"
-          urgency="low"
-        />
-
+        <FamilyBottomNav activeTab="family_assistant" onNavigate={onNavigate} />
       </div>
-      <FamilyBottomNav activeTab="family_assistant" onNavigate={onNavigate} />
     </Phone>
   );
 }

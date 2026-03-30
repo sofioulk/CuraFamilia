@@ -1,92 +1,222 @@
-import React, { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Phone } from "../../components/ui/Phone";
 import { T } from "../../styles/theme";
 import { FamilyBottomNav } from "../../components/family/FamilyBottomNav";
-import { Icon } from "../../components/icons/Icons";
+import { getSeniorHome } from "../../services/homeApi";
+import {
+  formatFamilyDate,
+  formatFamilyDateTime,
+  getEffectiveFamilyUser,
+  getMedicationStatusMeta,
+  resolveFamilySeniorId,
+} from "./familyUtils";
 
-function AppointmentCard({ doctor, specialty, date, time }) {
+const PAGE_BODY_FONT = "'DM Sans', sans-serif";
+const PAGE_TITLE_FONT = "'DM Serif Display', serif";
+
+function timeToSortValue(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  return Number.parseInt(match[1], 10) * 60 + Number.parseInt(match[2], 10);
+}
+
+function ScheduleRow({ medication }) {
+  const status = getMedicationStatusMeta(medication?.status);
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      padding: "16px",
-      backgroundColor: T.white,
-      borderRadius: 16,
-      marginBottom: 12,
-      borderLeft: `4px solid ${T.primary}`,
-      boxShadow: "0 2px 10px rgba(0,0,0,0.02)"
-    }}>
-      <div>
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: T.navy }}>Dr. {doctor}</h3>
-        <p style={{ margin: "2px 0 6px", fontSize: 13, color: T.textLight }}>{specialty}</p>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, color: T.primary, fontSize: 12, fontWeight: 600 }}>
-           <Icon.Calendar size={12} active={true} /> {date} \u2022 {time}
-        </div>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "70px 1fr auto",
+        alignItems: "center",
+        gap: 10,
+        padding: "10px 0",
+        borderBottom: "1px solid #EAF5F2",
+      }}
+    >
+      <strong style={{ fontSize: 13, color: T.primaryDark }}>{medication?.time || "--:--"}</strong>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: T.navy, fontWeight: 800 }}>{medication?.name || "Medicament"}</div>
+        <div style={{ fontSize: 12, color: T.textLight, marginTop: 2 }}>{medication?.dosage || "Dosage non precise"}</div>
       </div>
-      <div>
-        <button style={{
-          padding: "8px 12px", borderRadius: 8, border: `1px solid ${T.primary}40`, backgroundColor: "transparent",
-          color: T.primary, fontSize: 13, fontWeight: 600, cursor: "pointer"
-        }}>
-          Modifier
-        </button>
-      </div>
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 800,
+          borderRadius: 999,
+          padding: "5px 8px",
+          background: status.bg,
+          color: status.color,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {status.label}
+      </span>
     </div>
   );
 }
 
-export default function FamilyCalendar({ user, onNavigate }) {
+export default function FamilyCalendar({ user, onNavigate = () => {} }) {
+  const effectiveUser = useMemo(() => getEffectiveFamilyUser(user), [user]);
+  const seniorId = useMemo(() => resolveFamilySeniorId(effectiveUser), [effectiveUser]);
+
+  const [homeData, setHomeData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadCalendarData = useCallback(async () => {
+    if (!seniorId) {
+      setHomeData(null);
+      setLoading(false);
+      setError("");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const data = await getSeniorHome({ seniorId });
+      setHomeData(data);
+    } catch (apiError) {
+      setHomeData(null);
+      setError(apiError?.message || "Impossible de charger l'agenda.");
+    } finally {
+      setLoading(false);
+    }
+  }, [seniorId]);
+
+  useEffect(() => {
+    loadCalendarData();
+  }, [loadCalendarData]);
+
+  const medications = Array.isArray(homeData?.medications)
+    ? [...homeData.medications].sort((left, right) => timeToSortValue(left?.time) - timeToSortValue(right?.time))
+    : [];
+  const nextAppointment = homeData?.nextAppointment || null;
+
   return (
     <Phone>
-      <div style={{ padding: "24px 20px 100px", minHeight: "100vh", backgroundColor: "#F7F9FC", fontFamily: "'Inter', sans-serif" }}>
-        
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 }}>
-          <div>
-            <h1 style={{ margin: "0 0 4px", fontSize: 24, fontWeight: 700, color: T.navy }}>Agenda</h1>
-            <p style={{ margin: 0, fontSize: 14, color: T.textLight }}>Rendez-vous médicaux</p>
+      <div style={{ fontFamily: PAGE_BODY_FONT }}>
+        <div style={{ minHeight: "100vh", padding: "16px 16px 110px", color: T.navy }}>
+          <div style={{ animation: "fadeUp .45s both", marginBottom: 14 }}>
+            <h1 style={{ fontFamily: PAGE_TITLE_FONT, fontSize: 28, fontWeight: 400, lineHeight: 1.1, marginBottom: 8 }}>
+              Agenda
+            </h1>
+            <p style={{ color: T.textLight, fontSize: 14, lineHeight: 1.6 }}>
+              Planning medical du proche et chronologie des prises du jour.
+            </p>
           </div>
-          <button style={{
-             width: 44, height: 44, borderRadius: 22, backgroundColor: T.primary, color: T.white,
-             display: "flex", alignItems: "center", justifyContent: "center", border: "none", boxShadow: `0 4px 12px ${T.primary}40`
-          }}>
-            <Icon.Check active /> {/* Or Plus icon */}
-          </button>
+
+          {!seniorId && (
+            <div
+              style={{
+                animation: "fadeUp .45s .05s both",
+                background: "white",
+                borderRadius: 20,
+                border: `1.5px solid ${T.teal100}`,
+                padding: 18,
+                boxShadow: "0 10px 22px rgba(10,124,113,0.08)",
+              }}
+            >
+              <h2 style={{ fontSize: 17, fontWeight: 900, marginBottom: 8 }}>Agenda indisponible</h2>
+              <p style={{ fontSize: 14, color: T.textLight, lineHeight: 1.55, marginBottom: 12 }}>
+                Associez un senior depuis Reglages pour afficher les rendez-vous.
+              </p>
+              <button
+                onClick={() => onNavigate("family_settings")}
+                style={{
+                  border: "none",
+                  borderRadius: 12,
+                  background: `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`,
+                  color: "white",
+                  padding: "10px 14px",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                Aller aux Reglages
+              </button>
+            </div>
+          )}
+
+          {!!seniorId && (
+            <>
+              <div
+                style={{
+                  animation: "fadeUp .45s .05s both",
+                  background: `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`,
+                  color: "white",
+                  borderRadius: 22,
+                  padding: 16,
+                  marginBottom: 12,
+                  boxShadow: "0 16px 34px rgba(13,148,136,0.24)",
+                }}
+              >
+                <div style={{ fontSize: 12, opacity: 0.84, fontWeight: 800, marginBottom: 7 }}>Prochain rendez-vous</div>
+                <h2 style={{ fontSize: 22, lineHeight: 1.1, marginBottom: 6 }}>
+                  {nextAppointment?.doctorName || nextAppointment?.specialty || "Aucun rendez-vous"}
+                </h2>
+                <p style={{ fontSize: 13, lineHeight: 1.45, opacity: 0.9 }}>
+                  {nextAppointment?.scheduledAt ? formatFamilyDateTime(nextAppointment.scheduledAt) : "Aucune date planifiee"}
+                </p>
+              </div>
+
+              <div
+                style={{
+                  animation: "fadeUp .45s .08s both",
+                  background: "white",
+                  borderRadius: 20,
+                  border: `1.5px solid ${T.teal100}`,
+                  boxShadow: "0 10px 22px rgba(10,124,113,0.08)",
+                  padding: 16,
+                  marginBottom: 12,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 900 }}>Traitements du jour</h3>
+                  <span style={{ fontSize: 12, color: T.textLight, fontWeight: 700 }}>{formatFamilyDate(Date.now())}</span>
+                </div>
+
+                {loading && <p style={{ fontSize: 13, color: T.textLight }}>Chargement du planning...</p>}
+                {!loading && !!error && <p style={{ fontSize: 13, color: T.danger, fontWeight: 700 }}>{error}</p>}
+                {!loading && !error && !medications.length && (
+                  <p style={{ fontSize: 13, color: T.textLight }}>Aucune prise planifiee aujourd'hui.</p>
+                )}
+                {!loading && !error && !!medications.length && (
+                  <div>
+                    {medications.map((medication, index) => (
+                      <div key={medication?.id ?? index} style={{ borderBottom: index === medications.length - 1 ? "none" : undefined }}>
+                        <ScheduleRow medication={medication} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  onClick={loadCalendarData}
+                  disabled={loading}
+                  style={{
+                    border: `1px solid ${T.teal100}`,
+                    background: "white",
+                    borderRadius: 10,
+                    color: T.primaryDark,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    padding: "6px 10px",
+                    cursor: loading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {loading ? "Sync..." : "Actualiser l'agenda"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Mini Calendar Mock */}
-        <div style={{
-          backgroundColor: T.white, borderRadius: 20, padding: 20, marginBottom: 24, boxShadow: "0 4px 20px rgba(0,0,0,0.03)"
-        }}>
-           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-             <h3 style={{ margin: 0, fontSize: 16, color: T.navy }}>Mai 2026</h3>
-             <div style={{ display: "flex", gap: 12, color: T.textLight }}>
-                {"<"} {">"}
-             </div>
-           </div>
-           
-           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 12, color: T.textLight, fontWeight: 600, textAlign: "center" }}>
-             <span style={{flex: 1}}>L</span><span style={{flex: 1}}>M</span><span style={{flex: 1}}>M</span><span style={{flex: 1}}>J</span><span style={{flex: 1}}>V</span><span style={{flex: 1}}>S</span><span style={{flex: 1}}>D</span>
-           </div>
-           
-           <div style={{ display: "flex", justifyContent: "space-between", textAlign: "center", fontWeight: 500, color: T.navy }}>
-             <span style={{flex: 1, color: T.textLight}}>29</span>
-             <span style={{flex: 1, color: T.textLight}}>30</span>
-             <span style={{flex: 1}}>1</span>
-             <span style={{flex: 1, backgroundColor: T.primary, color: T.white, borderRadius: 12, padding: "4px 0"}}>2</span>
-             <span style={{flex: 1}}>3</span>
-             <span style={{flex: 1}}>4</span>
-             <span style={{flex: 1}}>5</span>
-           </div>
-        </div>
-
-        <h3 style={{ margin: "0 0 16px", fontSize: 14, textTransform: "uppercase", letterSpacing: 1, color: T.textLight, fontWeight: 600 }}>Prochains Visites</h3>
-        
-        <AppointmentCard doctor="Alaoui" specialty="Cardiologue" date="Mardi 12 Mai" time="14:30" />
-        <AppointmentCard doctor="Benkirane" specialty="Ophtalmologue" date="Jeudi 28 Mai" time="09:00" />
-        
+        <FamilyBottomNav activeTab="family_calendar" onNavigate={onNavigate} />
       </div>
-      <FamilyBottomNav activeTab="family_calendar" onNavigate={onNavigate} />
     </Phone>
   );
 }
