@@ -5,6 +5,8 @@ import com.curafamilia.auth.dto.AssistantChatRequest;
 import com.curafamilia.auth.dto.AssistantConversationResponse;
 import com.curafamilia.auth.exception.ApiException;
 import com.curafamilia.auth.repository.SeniorAssistantRepository;
+import com.curafamilia.auth.security.AuthenticatedUser;
+import com.curafamilia.auth.security.SeniorAccessResolver;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityTransaction;
 import jakarta.json.bind.Jsonb;
@@ -50,13 +52,14 @@ public class SeniorAssistantService {
             "Mon rendez-vous",
             "Je veux parler"
     );
+    private final SeniorAccessResolver seniorAccessResolver = new SeniorAccessResolver();
 
-    public AssistantConversationResponse getHistory(Long seniorId, String dateValue) {
-        validateSeniorId(seniorId);
+    public AssistantConversationResponse getHistory(AuthenticatedUser actor, Long requestedSeniorId, String dateValue) {
         LocalDate targetDate = parseDateOrToday(dateValue);
 
         EntityManager entityManager = JpaUtil.createEntityManager();
         try {
+            Long seniorId = seniorAccessResolver.resolveAccessibleSeniorId(entityManager, actor, requestedSeniorId);
             SeniorAssistantRepository repository = new SeniorAssistantRepository(entityManager);
             ensureSeniorExists(repository, seniorId);
 
@@ -86,12 +89,11 @@ public class SeniorAssistantService {
         }
     }
 
-    public AssistantConversationResponse chat(AssistantChatRequest request) {
+    public AssistantConversationResponse chat(AuthenticatedUser actor, AssistantChatRequest request) {
         if (request == null) {
             throw new ApiException(Response.Status.BAD_REQUEST, "Request body is required.");
         }
 
-        validateSeniorId(request.getSeniorId());
         String userText = normalizeUserMessage(request.getMessage());
         LocalDate targetDate = parseDateOrToday(request.getDate());
 
@@ -100,11 +102,12 @@ public class SeniorAssistantService {
         LocalDateTime now = LocalDateTime.now();
 
         try {
+            Long seniorId = seniorAccessResolver.resolveSeniorOwnerId(entityManager, actor);
             SeniorAssistantRepository repository = new SeniorAssistantRepository(entityManager);
-            SeniorAssistantRepository.SeniorProjection senior = ensureSeniorExists(repository, request.getSeniorId());
+            SeniorAssistantRepository.SeniorProjection senior = ensureSeniorExists(repository, seniorId);
 
             transaction.begin();
-            Long sessionId = repository.upsertOpenSessionAndGetId(request.getSeniorId(), targetDate, now);
+            Long sessionId = repository.upsertOpenSessionAndGetId(seniorId, targetDate, now);
 
             List<SeniorAssistantRepository.MessageProjection> messagesBeforeUser = repository.findMessagesBySession(sessionId);
             ConversationContext contextBeforeUser = analyzeConversationContext(messagesBeforeUser);
@@ -113,9 +116,9 @@ public class SeniorAssistantService {
             Long userMessageId = repository.insertMessageAndGetId(sessionId, "senior", userText, userIntent, now);
 
             Optional<SeniorAssistantRepository.MedicationHintProjection> nextMedication =
-                    repository.findNextMedication(request.getSeniorId(), now.toLocalTime());
+                    repository.findNextMedication(seniorId, now.toLocalTime());
             Optional<SeniorAssistantRepository.AppointmentHintProjection> nextAppointment =
-                    repository.findNextAppointment(request.getSeniorId(), now);
+                    repository.findNextAppointment(seniorId, now);
 
             List<SeniorAssistantRepository.MessageProjection> messagesAfterUser = repository.findMessagesBySession(sessionId);
             ConversationContext contextAfterUser = analyzeConversationContext(messagesAfterUser);
@@ -138,14 +141,16 @@ public class SeniorAssistantService {
             );
 
             List<SeniorAssistantRepository.MessageProjection> allMessages = repository.findMessagesBySession(sessionId);
+            SeniorAssistantRepository.DailySummaryProjection dailySummary = buildSummaryFromMessages(allMessages);
+            repository.upsertDailySummary(seniorId, targetDate, dailySummary);
 
             transaction.commit();
 
             SeniorAssistantRepository.SessionProjection session = repository
-                    .findSessionByDate(request.getSeniorId(), targetDate)
+                    .findSessionByDate(seniorId, targetDate)
                     .orElse(new SeniorAssistantRepository.SessionProjection(
                             sessionId,
-                            request.getSeniorId(),
+                            seniorId,
                             targetDate,
                             "open",
                             now,
@@ -153,7 +158,7 @@ public class SeniorAssistantService {
                     ));
 
             AssistantConversationResponse.ConversationData conversation = new AssistantConversationResponse.ConversationData(
-                    request.getSeniorId(),
+                    seniorId,
                     session.getId(),
                     targetDate.format(DATE_FORMATTER),
                     normalizeStatus(session.getStatus()),
@@ -412,7 +417,7 @@ public class SeniorAssistantService {
         );
 
         try {
-            return callClaudeApi(recentMessages, userText, aiContext, intent, context, topicShifted);
+            return callGroqApi(recentMessages, userText, aiContext, intent, context, topicShifted);
         } catch (RuntimeException exception) {
             return chooseByText(userText, fallbackReplies, context.lastBotText());
         }
@@ -621,7 +626,7 @@ public class SeniorAssistantService {
         );
     }
 
-    private String callClaudeApi(
+    private String callGroqApi(
             List<SeniorAssistantRepository.MessageProjection> recentMessages,
             String userMessage,
             String context,
@@ -631,7 +636,12 @@ public class SeniorAssistantService {
         String apiKey = Optional.ofNullable(System.getenv("GROQ_API_KEY"))
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
-                .orElseThrow(() -> new IllegalStateException("Missing GROQ_API_KEY environment variable."));
+                .orElse(null);
+
+        if (apiKey == null) {
+            throw new IllegalStateException("Missing GROQ_API_KEY environment variable.");
+        }
+
         String userName = extractUserNameFromContext(context);
         String medications = extractMedicationSummaryFromContext(context);
         String systemPrompt = "Tu es l'assistant sante de CuraFamilia, "

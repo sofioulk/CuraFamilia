@@ -15,6 +15,10 @@
         <url-pattern>/*</url-pattern>
     </filter-mapping>
 
+    <listener>
+        <listener-class>com.curafamilia.auth.websocket.SocketEndpointInitializer</listener-class>
+    </listener>
+
     <servlet>
         <servlet-name>jersey-servlet</servlet-name>
         <servlet-class>org.glassfish.jersey.servlet.ServletContainer</servlet-class>

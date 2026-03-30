@@ -34,6 +34,14 @@ backend-auth/
 - `GET /senior/assistant/history?seniorId={id}[&date=YYYY-MM-DD]`
 - `POST /senior/assistant/chat`
 
+For the full production contract, updated route list, curl/Postman-importable examples, websocket events,
+and frontend integration notes, see [`API_CONTRACT.md`](./API_CONTRACT.md).
+
+## Migrations
+
+Explicit SQL migrations now live in [`db/migrations`](./db/migrations).
+Apply them before startup; runtime schema mutation has been removed.
+
 ## Database configuration
 
 Edit `src/main/resources/backend.properties`:
@@ -175,6 +183,12 @@ Content-Type: application/json
   "seniorId": 1,
   "message": "Je suis fatiguee aujourd'hui"
 }
+```
+
+## Test command
+
+```bash
+mvn test
 ```
 
 ## Response format

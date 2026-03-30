@@ -10,6 +10,7 @@ export const css = `
   @keyframes shake    { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
   @keyframes scaleIn  { from{transform:scale(0.8);opacity:0} to{transform:scale(1);opacity:1} }
   @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  @keyframes pulseScale { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:0.6} }
   @keyframes pulseSoft { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.03);opacity:0.92} }
   @keyframes typing { 0%,80%,100%{transform:scale(.7);opacity:.35} 40%{transform:scale(1);opacity:1} }
   @keyframes sosHeartbeat {
@@ -31,6 +32,10 @@ export const css = `
   @keyframes alertBlink {
     0%,100% { opacity:1; transform:translateY(0); }
     50% { opacity:0.72; transform:translateY(-1px); }
+  }
+  @keyframes shimmer {
+    0% { background-position:200% 0 }
+    100% { background-position:-200% 0 }
   }
   
   * { box-sizing:border-box; margin:0; padding:0; }

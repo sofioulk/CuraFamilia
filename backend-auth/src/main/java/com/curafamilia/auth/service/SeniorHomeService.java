@@ -9,7 +9,10 @@ import com.curafamilia.auth.dto.MedicationTakeResponse;
 import com.curafamilia.auth.dto.SosAlertRequest;
 import com.curafamilia.auth.dto.SosAlertResponse;
 import com.curafamilia.auth.exception.ApiException;
+import com.curafamilia.auth.realtime.RealtimeEventBus;
 import com.curafamilia.auth.repository.SeniorHomeRepository;
+import com.curafamilia.auth.security.AuthenticatedUser;
+import com.curafamilia.auth.security.SeniorAccessResolver;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityTransaction;
 import jakarta.ws.rs.core.Response;
@@ -72,15 +75,15 @@ public class SeniorHomeService {
             EVENING_DAY_PROFILE,
             EVENING_SIDE_EFFECTS_PROFILE
     );
+    private final SeniorAccessResolver seniorAccessResolver = new SeniorAccessResolver();
 
-    public HomeResponse getHome(Long seniorId, String dateValue) {
-        validateSeniorId(seniorId);
-
+    public HomeResponse getHome(AuthenticatedUser actor, Long requestedSeniorId, String dateValue) {
         LocalDate targetDate = parseDateOrToday(dateValue);
         LocalDateTime now = LocalDateTime.now();
 
         EntityManager entityManager = JpaUtil.createEntityManager();
         try {
+            Long seniorId = seniorAccessResolver.resolveAccessibleSeniorId(entityManager, actor, requestedSeniorId);
             SeniorHomeRepository repository = new SeniorHomeRepository(entityManager);
             SeniorHomeRepository.SeniorProjection senior = ensureSeniorExists(repository, seniorId);
 
@@ -145,7 +148,7 @@ public class SeniorHomeService {
         }
     }
 
-    public MedicationTakeResponse markMedicationTaken(Long medicationId, MedicationTakeRequest request) {
+    public MedicationTakeResponse markMedicationTaken(AuthenticatedUser actor, Long medicationId, MedicationTakeRequest request) {
         if (medicationId == null || medicationId <= 0) {
             throw new ApiException(Response.Status.BAD_REQUEST, "medicationId is required.");
         }
@@ -153,14 +156,12 @@ public class SeniorHomeService {
             throw new ApiException(Response.Status.BAD_REQUEST, "Request body is required.");
         }
 
-        validateSeniorId(request.getSeniorId());
-
         EntityManager entityManager = JpaUtil.createEntityManager();
         EntityTransaction transaction = entityManager.getTransaction();
 
         try {
+            Long seniorId = seniorAccessResolver.resolveSeniorOwnerId(entityManager, actor);
             SeniorHomeRepository repository = new SeniorHomeRepository(entityManager);
-            Long seniorId = request.getSeniorId();
             ensureSeniorExists(repository, seniorId);
             SeniorHomeRepository.MedicationProjection medication = repository
                     .findMedicationForSenior(seniorId, medicationId)
@@ -181,7 +182,7 @@ public class SeniorHomeService {
                     .findMedicationTake(medicationId, scheduledAt)
                     .orElse(new SeniorHomeRepository.MedicationTakeProjection(medicationId, scheduledAt, takenAt, "taken"));
 
-            return new MedicationTakeResponse(
+            MedicationTakeResponse response = new MedicationTakeResponse(
                     "Prise enregistree.",
                     new MedicationTakeResponse.TakeData(
                             medicationId,
@@ -191,6 +192,8 @@ public class SeniorHomeService {
                             normalizeStatus(take.getStatus())
                     )
             );
+            RealtimeEventBus.publish("medication:taken", seniorId, actor, response.getTake());
+            return response;
         } catch (ApiException exception) {
             rollback(transaction);
             throw exception;
@@ -202,12 +205,11 @@ public class SeniorHomeService {
         }
     }
 
-    public DailyCheckinResponse submitDailyCheckin(DailyCheckinRequest request) {
+    public DailyCheckinResponse submitDailyCheckin(AuthenticatedUser actor, DailyCheckinRequest request) {
         if (request == null) {
             throw new ApiException(Response.Status.BAD_REQUEST, "Request body is required.");
         }
 
-        validateSeniorId(request.getSeniorId());
         CheckinProfile profile = resolveCheckinProfileByQuestion(request.getQuestion(), LocalTime.now());
         String answer = mapDisplayOrCanonicalAnswerToStoredValue(request.getAnswer(), profile);
         String question = profile.question();
@@ -218,22 +220,25 @@ public class SeniorHomeService {
         EntityTransaction transaction = entityManager.getTransaction();
 
         try {
+            Long seniorId = seniorAccessResolver.resolveSeniorOwnerId(entityManager, actor);
             SeniorHomeRepository repository = new SeniorHomeRepository(entityManager);
-            ensureSeniorExists(repository, request.getSeniorId());
+            ensureSeniorExists(repository, seniorId);
 
             transaction.begin();
-            repository.insertDailyCheckin(request.getSeniorId(), question, answer, answeredAt);
+            repository.insertDailyCheckin(seniorId, question, answer, answeredAt);
             transaction.commit();
 
-            return new DailyCheckinResponse(
+            DailyCheckinResponse response = new DailyCheckinResponse(
                     "Reponse enregistree.",
                     new DailyCheckinResponse.CheckinData(
-                            request.getSeniorId(),
+                            seniorId,
                             question,
                             displayAnswer,
                             formatDateTime(answeredAt)
                     )
             );
+            RealtimeEventBus.publish("checkin:answered", seniorId, actor, response.getCheckin());
+            return response;
         } catch (ApiException exception) {
             rollback(transaction);
             throw exception;
@@ -245,12 +250,11 @@ public class SeniorHomeService {
         }
     }
 
-    public SosAlertResponse triggerSos(SosAlertRequest request) {
+    public SosAlertResponse triggerSos(AuthenticatedUser actor, SosAlertRequest request) {
         if (request == null) {
             throw new ApiException(Response.Status.BAD_REQUEST, "Request body is required.");
         }
 
-        validateSeniorId(request.getSeniorId());
         String comment = normalizeOptional(request.getComment());
         LocalDateTime triggeredAt = LocalDateTime.now();
 
@@ -258,8 +262,8 @@ public class SeniorHomeService {
         EntityTransaction transaction = entityManager.getTransaction();
 
         try {
+            Long seniorId = seniorAccessResolver.resolveSeniorOwnerId(entityManager, actor);
             SeniorHomeRepository repository = new SeniorHomeRepository(entityManager);
-            Long seniorId = request.getSeniorId();
             ensureSeniorExists(repository, seniorId);
 
             Optional<SeniorHomeRepository.SosAlertProjection> latestActiveAlert =
@@ -280,7 +284,9 @@ public class SeniorHomeService {
             SeniorHomeRepository.SosAlertProjection alert = repository.findLatestSosAlert(seniorId)
                     .orElse(new SeniorHomeRepository.SosAlertProjection(null, triggeredAt, "triggered", comment));
 
-            return buildSosAlertResponse("Alerte SOS declenchee.", seniorId, alert, false);
+            SosAlertResponse response = buildSosAlertResponse("Alerte SOS declenchee.", seniorId, alert, false);
+            RealtimeEventBus.publish("sos:triggered", seniorId, actor, response.getAlert());
+            return response;
         } catch (ApiException exception) {
             rollback(transaction);
             throw exception;

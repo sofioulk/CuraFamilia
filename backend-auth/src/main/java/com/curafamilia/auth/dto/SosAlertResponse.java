@@ -44,16 +44,30 @@ public class SosAlertResponse {
         private String status;
         private String triggeredAt;
         private String comment;
+        private String acknowledgedAt;
+        private Long acknowledgedByUserId;
+        private String resolvedAt;
+        private Long resolvedByUserId;
 
         public AlertData() {
         }
 
         public AlertData(Long id, Long seniorId, String status, String triggeredAt, String comment) {
+            this(id, seniorId, status, triggeredAt, comment, null, null, null, null);
+        }
+
+        public AlertData(Long id, Long seniorId, String status, String triggeredAt, String comment,
+                         String acknowledgedAt, Long acknowledgedByUserId,
+                         String resolvedAt, Long resolvedByUserId) {
             this.id = id;
             this.seniorId = seniorId;
             this.status = status;
             this.triggeredAt = triggeredAt;
             this.comment = comment;
+            this.acknowledgedAt = acknowledgedAt;
+            this.acknowledgedByUserId = acknowledgedByUserId;
+            this.resolvedAt = resolvedAt;
+            this.resolvedByUserId = resolvedByUserId;
         }
 
         public Long getId() {
@@ -94,6 +108,38 @@ public class SosAlertResponse {
 
         public void setComment(String comment) {
             this.comment = comment;
+        }
+
+        public String getAcknowledgedAt() {
+            return acknowledgedAt;
+        }
+
+        public void setAcknowledgedAt(String acknowledgedAt) {
+            this.acknowledgedAt = acknowledgedAt;
+        }
+
+        public Long getAcknowledgedByUserId() {
+            return acknowledgedByUserId;
+        }
+
+        public void setAcknowledgedByUserId(Long acknowledgedByUserId) {
+            this.acknowledgedByUserId = acknowledgedByUserId;
+        }
+
+        public String getResolvedAt() {
+            return resolvedAt;
+        }
+
+        public void setResolvedAt(String resolvedAt) {
+            this.resolvedAt = resolvedAt;
+        }
+
+        public Long getResolvedByUserId() {
+            return resolvedByUserId;
+        }
+
+        public void setResolvedByUserId(Long resolvedByUserId) {
+            this.resolvedByUserId = resolvedByUserId;
         }
     }
 }

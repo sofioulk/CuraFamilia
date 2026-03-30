@@ -1,7 +1,9 @@
 package com.curafamilia.auth.util;
 
 import com.auth0.jwt.JWT;
+import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.interfaces.DecodedJWT;
 import com.curafamilia.auth.config.DatabaseConfig;
 import com.curafamilia.auth.entity.User;
 import java.nio.charset.StandardCharsets;
@@ -31,6 +33,15 @@ public final class TokenUtil {
                 .withIssuedAt(Instant.now())
                 .withExpiresAt(Instant.now().plus(expirationMinutes, ChronoUnit.MINUTES))
                 .sign(Algorithm.HMAC256(secret));
+    }
+
+    public static DecodedJWT verifyAuthToken(String token) {
+        String secret = DatabaseConfig.getRequired("jwt.secret");
+        String issuer = DatabaseConfig.getRequired("jwt.issuer");
+        JWTVerifier verifier = JWT.require(Algorithm.HMAC256(secret))
+                .withIssuer(issuer)
+                .build();
+        return verifier.verify(token);
     }
 
     public static String generateRawResetToken() {

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Phone } from "../../components/ui/Phone";
 import { T } from "../../styles/theme";
 import { Icon } from "../../components/icons/Icons";
 import { FamilyBottomNav } from "../../components/family/FamilyBottomNav";
 import { getEffectiveFamilyUser, resolveFamilySeniorId } from "./familyUtils";
+import { generateLinkCode } from "../../services/homeApi";
 
 const PAGE_BODY_FONT = "'DM Sans', sans-serif";
 const PAGE_TITLE_FONT = "'DM Serif Display', serif";
@@ -97,13 +98,11 @@ function ToggleRow({ label, description, enabled, onChange, noBorder = false }) 
   );
 }
 
-function buildPairingCode(user, seniorId) {
-  if (seniorId) {
-    return `SR-${String(seniorId).padStart(4, "0")}`;
-  }
-  const source = String(user?.id || user?.email || user?.name || "0000");
-  const digits = source.replace(/\D/g, "").slice(0, 4);
-  return `SR-${(digits || "0000").padStart(4, "0")}`;
+function formatExpiry(expiresAt) {
+  if (!expiresAt) return null;
+  const date = new Date(expiresAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
 export default function FamilySettings({ user, onNavigate = () => {} }) {
@@ -112,6 +111,10 @@ export default function FamilySettings({ user, onNavigate = () => {} }) {
 
   const [smsAlerts, setSmsAlerts] = useState(true);
   const [weeklyReport, setWeeklyReport] = useState(true);
+  const [linkCode, setLinkCode] = useState(null);
+  const [linkExpiresAt, setLinkExpiresAt] = useState(null);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkError, setLinkError] = useState("");
 
   useEffect(() => {
     try {
@@ -136,7 +139,23 @@ export default function FamilySettings({ user, onNavigate = () => {} }) {
     }
   }, [smsAlerts, weeklyReport]);
 
-  const pairingCode = buildPairingCode(effectiveUser, seniorId);
+  const fetchLinkCode = useCallback(async () => {
+    setLinkLoading(true);
+    setLinkError("");
+    try {
+      const data = await generateLinkCode({ seniorId });
+      setLinkCode(data.code);
+      setLinkExpiresAt(data.expiresAt || null);
+    } catch (err) {
+      setLinkError(String(err?.message || "Erreur lors de la generation du code."));
+    } finally {
+      setLinkLoading(false);
+    }
+  }, [seniorId]);
+
+  useEffect(() => {
+    fetchLinkCode();
+  }, [fetchLinkCode]);
 
   const handleLogout = () => {
     try {
@@ -174,20 +193,48 @@ export default function FamilySettings({ user, onNavigate = () => {} }) {
           >
             <div style={{ fontSize: 12, opacity: 0.84, fontWeight: 800, marginBottom: 6 }}>Code de liaison</div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-              <strong style={{ fontSize: 28, letterSpacing: 1.2 }}>{pairingCode}</strong>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  padding: "6px 8px",
-                  borderRadius: 999,
-                  background: seniorId ? "rgba(22,163,74,0.35)" : "rgba(251,146,60,0.35)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {seniorId ? "Senior relie" : "En attente de liaison"}
-              </span>
+              <strong style={{ fontSize: 28, letterSpacing: 4, opacity: linkLoading ? 0.4 : 1 }}>
+                {linkLoading ? "······" : linkError ? "——" : (linkCode || "——")}
+              </strong>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    padding: "6px 8px",
+                    borderRadius: 999,
+                    background: seniorId ? "rgba(22,163,74,0.35)" : "rgba(251,146,60,0.35)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {seniorId ? "Senior relie" : "En attente de liaison"}
+                </span>
+                {linkExpiresAt && !linkError && (
+                  <span style={{ fontSize: 10, opacity: 0.7 }}>Expire le {formatExpiry(linkExpiresAt)}</span>
+                )}
+              </div>
             </div>
+            {linkError && (
+              <div style={{ fontSize: 11, marginTop: 6, opacity: 0.8 }}>{linkError}</div>
+            )}
+            <button
+              onClick={fetchLinkCode}
+              disabled={linkLoading}
+              style={{
+                marginTop: 10,
+                background: "rgba(255,255,255,0.18)",
+                border: "none",
+                borderRadius: 8,
+                color: "white",
+                fontSize: 12,
+                fontWeight: 800,
+                padding: "6px 12px",
+                cursor: linkLoading ? "default" : "pointer",
+                opacity: linkLoading ? 0.5 : 1,
+              }}
+            >
+              {linkLoading ? "Generation..." : "Nouveau code"}
+            </button>
           </div>
 
           <Section title="Compte">

@@ -374,6 +374,27 @@ export async function sendSeniorAssistantMessage({ seniorId, message, date } = {
   });
 }
 
+export async function generateLinkCode({ seniorId } = {}) {
+  const body = {};
+  if (seniorId) body.seniorId = seniorId;
+  return request("/api/links/generate", { method: "POST", body });
+}
+
+export async function getFamilyDashboard({ seniorId } = {}) {
+  if (!seniorId) {
+    throw new Error("seniorId is required.");
+  }
+  return request(`/api/family/seniors/${seniorId}/dashboard`, { method: "GET" });
+}
+
+export async function getFamilyMoodTrend({ seniorId, days = 7 } = {}) {
+  if (!seniorId) {
+    throw new Error("seniorId is required.");
+  }
+  const params = new URLSearchParams({ days: String(days) });
+  return request(`/api/family/seniors/${seniorId}/analytics/checkins?${params.toString()}`, { method: "GET" });
+}
+
 export async function getSeniorProfile({ seniorId } = {}) {
   if (!seniorId) {
     throw new Error("seniorId is required.");

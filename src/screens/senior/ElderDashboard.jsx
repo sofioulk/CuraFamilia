@@ -51,10 +51,16 @@ function formatTimeSlotLabel(value) {
 }
 
 function getNextReturnLabel(medications = []) {
+  const timeToMinutes = (timeStr) => {
+    const match = String(timeStr).match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return 9999;
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  };
+
   const firstTime = medications
     .map((medication) => String(medication?.time || "").trim())
     .filter(Boolean)
-    .sort((left, right) => left.localeCompare(right))[0];
+    .sort((left, right) => timeToMinutes(left) - timeToMinutes(right))[0];
 
   if (!firstTime) return "";
   const formattedTime = formatTimeSlotLabel(firstTime);
@@ -1052,5 +1058,4 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
     </Phone>
   );
 }
-
 

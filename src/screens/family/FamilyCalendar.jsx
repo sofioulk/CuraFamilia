@@ -157,7 +157,7 @@ export default function FamilyCalendar({ user, onNavigate = () => {} }) {
                   {nextAppointment?.doctorName || nextAppointment?.specialty || "Aucun rendez-vous"}
                 </h2>
                 <p style={{ fontSize: 13, lineHeight: 1.45, opacity: 0.9 }}>
-                  {nextAppointment?.scheduledAt ? formatFamilyDateTime(nextAppointment.scheduledAt) : "Aucune date planifiee"}
+                  {nextAppointment?.appointmentAt ? formatFamilyDateTime(nextAppointment.appointmentAt) : "Aucune date planifiee"}
                 </p>
               </div>
 

@@ -4,6 +4,8 @@ import com.curafamilia.auth.config.JpaUtil;
 import com.curafamilia.auth.dto.SeniorMedicationsResponse;
 import com.curafamilia.auth.exception.ApiException;
 import com.curafamilia.auth.repository.SeniorMedicationRepository;
+import com.curafamilia.auth.security.AuthenticatedUser;
+import com.curafamilia.auth.security.SeniorAccessResolver;
 import jakarta.persistence.EntityManager;
 import jakarta.ws.rs.core.Response;
 import java.time.LocalDate;
@@ -25,13 +27,14 @@ public class SeniorMedicationService {
             "soir", "Soir",
             "ponctuel", "Ponctuel"
     );
+    private final SeniorAccessResolver seniorAccessResolver = new SeniorAccessResolver();
 
-    public SeniorMedicationsResponse getMedications(Long seniorId, String periodValue) {
-        validateSeniorId(seniorId);
+    public SeniorMedicationsResponse getMedications(AuthenticatedUser actor, Long requestedSeniorId, String periodValue) {
         String normalizedPeriod = normalizePeriod(periodValue);
 
         EntityManager entityManager = JpaUtil.createEntityManager();
         try {
+            Long seniorId = seniorAccessResolver.resolveAccessibleSeniorId(entityManager, actor, requestedSeniorId);
             SeniorMedicationRepository repository = new SeniorMedicationRepository(entityManager);
             ensureSeniorExists(repository, seniorId);
 

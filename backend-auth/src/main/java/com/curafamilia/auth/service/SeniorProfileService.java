@@ -5,20 +5,21 @@ import com.curafamilia.auth.dto.SeniorProfileDto;
 import com.curafamilia.auth.entity.User;
 import com.curafamilia.auth.entity.UserProfile;
 import com.curafamilia.auth.exception.ApiException;
+import com.curafamilia.auth.realtime.RealtimeEventBus;
 import com.curafamilia.auth.repository.SeniorProfileRepository;
+import com.curafamilia.auth.security.AuthenticatedUser;
+import com.curafamilia.auth.security.SeniorAccessResolver;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityTransaction;
 import jakarta.ws.rs.core.Response;
 
 public class SeniorProfileService {
+    private final SeniorAccessResolver seniorAccessResolver = new SeniorAccessResolver();
 
-    public SeniorProfileDto getProfile(Long seniorId) {
-        if (seniorId == null || seniorId <= 0) {
-            throw new ApiException(Response.Status.BAD_REQUEST, "seniorId is required.");
-        }
-
+    public SeniorProfileDto getProfile(AuthenticatedUser actor, Long requestedSeniorId) {
         EntityManager entityManager = JpaUtil.createEntityManager();
         try {
+            Long seniorId = seniorAccessResolver.resolveAccessibleSeniorId(entityManager, actor, requestedSeniorId);
             // Validate user exists
             User user = entityManager.find(User.class, seniorId);
             if (user == null || !"senior".equalsIgnoreCase(user.getRole().name())) {
@@ -35,10 +36,7 @@ public class SeniorProfileService {
         }
     }
 
-    public SeniorProfileDto saveProfile(Long seniorId, SeniorProfileDto dto) {
-        if (seniorId == null || seniorId <= 0) {
-            throw new ApiException(Response.Status.BAD_REQUEST, "seniorId is required.");
-        }
+    public SeniorProfileDto saveProfile(AuthenticatedUser actor, Long requestedSeniorId, SeniorProfileDto dto) {
         if (dto == null) {
             throw new ApiException(Response.Status.BAD_REQUEST, "Profile data is required.");
         }
@@ -47,6 +45,7 @@ public class SeniorProfileService {
         EntityTransaction transaction = entityManager.getTransaction();
 
         try {
+            Long seniorId = seniorAccessResolver.resolveAccessibleSeniorId(entityManager, actor, requestedSeniorId);
             // Validate user exists
             User user = entityManager.find(User.class, seniorId);
             if (user == null || !"senior".equalsIgnoreCase(user.getRole().name())) {
@@ -67,7 +66,9 @@ public class SeniorProfileService {
             UserProfile savedProfile = repository.save(profile);
             transaction.commit();
 
-            return mapToDto(seniorId, savedProfile);
+            SeniorProfileDto response = mapToDto(seniorId, savedProfile);
+            RealtimeEventBus.publish("profile:updated", seniorId, actor, response);
+            return response;
         } catch (Exception e) {
             if (transaction != null && transaction.isActive()) {
                 transaction.rollback();

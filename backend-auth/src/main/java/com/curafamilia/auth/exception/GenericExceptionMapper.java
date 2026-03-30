@@ -1,17 +1,22 @@
 package com.curafamilia.auth.exception;
 
-import com.curafamilia.auth.dto.MessageResponse;
+import com.curafamilia.auth.dto.ApiErrorResponse;
 import jakarta.json.bind.JsonbException;
 import jakarta.json.stream.JsonParsingException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
 
 @Provider
 public class GenericExceptionMapper implements ExceptionMapper<Exception> {
+    @Context
+    private UriInfo uriInfo;
+
     @Override
     public Response toResponse(Exception exception) {
         if (isJsonDeserializationFailure(exception)) {
@@ -46,7 +51,7 @@ public class GenericExceptionMapper implements ExceptionMapper<Exception> {
     private Response buildJsonResponse(Response.StatusType status, String message) {
         return Response.status(status)
                 .type(MediaType.APPLICATION_JSON)
-                .entity(new MessageResponse(message))
+                .entity(ApiErrorResponse.of(status, message, resolvePath()))
                 .build();
     }
 
@@ -85,5 +90,9 @@ public class GenericExceptionMapper implements ExceptionMapper<Exception> {
             current = current.getCause();
         }
         return null;
+    }
+
+    private String resolvePath() {
+        return uriInfo == null ? null : uriInfo.getRequestUri().getPath();
     }
 }
