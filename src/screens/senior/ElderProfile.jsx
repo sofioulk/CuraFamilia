@@ -3,7 +3,8 @@ import { T } from "../../styles/theme";
 import { Icon } from "../../components/icons/Icons";
 import { Phone } from "../../components/ui/Phone";
 import { BottomNav } from "../../components/senior/BottomNav";
-import { getSeniorProfile, parseSeniorIdFromUser } from "../../services/homeApi";
+import { generateLinkCode, getSeniorProfile, parseSeniorIdFromUser } from "../../services/homeApi";
+import { clearStoredAuthSession } from "../../utils/authStorage";
 
 const PAGE_TITLE_FONT = "'DM Serif Display', serif";
 
@@ -107,6 +108,10 @@ export default function ElderProfile({ user, onNavigate = () => {} }) {
   const [profile, setProfile] = useState(null);
   const [error, setError] = useState(null);
   const [audioReminders, setAudioReminders] = useState(true);
+  const [linkData, setLinkData] = useState(null);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkError, setLinkError] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState("");
 
   // Helper properties from the backend or fallback
   const p = profile || {};
@@ -117,6 +122,63 @@ export default function ElderProfile({ user, onNavigate = () => {} }) {
   if (p.dateOfBirth) {
     const calcAge = new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear();
     ageString = `${calcAge} ans`;
+  }
+
+  const parsedSeniorId = parseSeniorIdFromUser(user);
+
+  function formatLinkExpiry(value) {
+    if (!value) return "";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return String(value);
+    }
+    return parsed.toLocaleString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  async function handleGenerateLinkCode() {
+    if (!parsedSeniorId) {
+      setLinkError("Impossible de générer le code pour ce compte.");
+      return;
+    }
+
+    try {
+      setLinkLoading(true);
+      setLinkError(null);
+      setCopyFeedback("");
+      const data = await generateLinkCode({ seniorId: parsedSeniorId });
+      setLinkData(data);
+    } catch (err) {
+      const rawMessage = String(err?.message || "").trim();
+      const needsReconnect = /authorization header is required|bearer token is missing|invalid or expired token/i.test(rawMessage);
+      setLinkError(
+        needsReconnect
+          ? "Votre session a expiré. Reconnectez-vous puis réessayez."
+          : (rawMessage || "Impossible de générer le code de liaison.")
+      );
+    } finally {
+      setLinkLoading(false);
+    }
+  }
+
+  async function handleCopyLinkCode() {
+    const code = String(linkData?.code || "").trim();
+    if (!code) return;
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(code);
+        setCopyFeedback("Code copié.");
+        return;
+      }
+      setCopyFeedback("Copie non disponible sur cet appareil.");
+    } catch (_error) {
+      setCopyFeedback("Impossible de copier le code.");
+    }
   }
 
   // Effect to load data
@@ -146,7 +208,7 @@ export default function ElderProfile({ user, onNavigate = () => {} }) {
       }
     }
     loadProfile();
-  }, [user?.id]);
+  }, [user]);
 
   return (
     <Phone>
@@ -298,6 +360,116 @@ export default function ElderProfile({ user, onNavigate = () => {} }) {
           )}
         </SectionCard>
 
+        <SectionCard
+          title="Accès famille"
+          subtitle="Créez un code de liaison sécurisé pour inviter un proche à suivre votre compte"
+          icon={<Icon.Users />}
+          delay={0.18}
+        >
+          {linkData?.code && (
+            <div
+              style={{
+                marginTop: 14,
+                background: T.teal50,
+                border: `1.5px solid ${T.teal100}`,
+                borderRadius: 18,
+                padding: "14px 12px",
+              }}
+            >
+              <div style={{ fontSize: 12, color: T.textLight, fontWeight: 700, marginBottom: 8 }}>
+                Code de liaison
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  gap: 6,
+                  flexWrap: "wrap",
+                  marginBottom: 10,
+                }}
+              >
+                {String(linkData.code).split("").map((digit, index) => (
+                  <div
+                    key={`${digit}-${index}`}
+                    style={{
+                      width: 38,
+                      height: 46,
+                      borderRadius: 12,
+                      background: "white",
+                      border: `1.5px solid ${T.teal100}`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 24,
+                      fontWeight: 900,
+                      color: T.navy,
+                    }}
+                  >
+                    {digit}
+                  </div>
+                ))}
+              </div>
+              {linkData?.expiresAt && (
+                <div style={{ fontSize: 12, color: T.textLight, textAlign: "center" }}>
+                  Valable jusqu'au {formatLinkExpiry(linkData.expiresAt)}
+                </div>
+              )}
+              {copyFeedback && (
+                <div style={{ fontSize: 12, color: T.primaryDark, textAlign: "center", marginTop: 8, fontWeight: 700 }}>
+                  {copyFeedback}
+                </div>
+              )}
+            </div>
+          )}
+
+          {linkError && (
+            <div style={{ marginTop: 10, fontSize: 12, color: T.danger, fontWeight: 700 }}>
+              {linkError}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button
+              type="button"
+              onClick={handleGenerateLinkCode}
+              disabled={linkLoading}
+              style={{
+                flex: 1,
+                border: "none",
+                borderRadius: 14,
+                padding: "14px 12px",
+                background: linkLoading ? "#a0d4d0" : `linear-gradient(135deg, ${T.primary}, ${T.primaryDark})`,
+                color: "white",
+                fontSize: 14,
+                fontWeight: 800,
+                cursor: linkLoading ? "not-allowed" : "pointer",
+                boxShadow: linkLoading ? "none" : "0 10px 24px rgba(13,148,136,0.18)",
+              }}
+            >
+              {linkLoading ? "Création..." : linkData?.code ? "Créer à nouveau" : "Créer"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopyLinkCode}
+              disabled={!linkData?.code}
+              style={{
+                minWidth: 110,
+                borderRadius: 14,
+                padding: "14px 12px",
+                border: `1.5px solid ${linkData?.code ? T.teal100 : "#D7E3E1"}`,
+                background: "white",
+                color: linkData?.code ? T.primaryDark : "#9AA8A6",
+                fontSize: 14,
+                fontWeight: 800,
+                cursor: linkData?.code ? "pointer" : "not-allowed",
+              }}
+            >
+              Copier
+            </button>
+          </div>
+        </SectionCard>
+
         {/* Preferences */}
         <SectionCard
           title={"Pr\u00E9f\u00E9rences"}
@@ -417,12 +589,7 @@ export default function ElderProfile({ user, onNavigate = () => {} }) {
         {/* Logout */}
         <button
           onClick={() => {
-            try {
-              localStorage.removeItem("cura_auth_token");
-              localStorage.removeItem("cura_auth_user");
-            } catch (_error) {
-              // Ignore storage errors.
-            }
+            clearStoredAuthSession();
             window.location.reload();
           }}
           style={{

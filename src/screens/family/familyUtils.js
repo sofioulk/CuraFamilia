@@ -1,5 +1,8 @@
-import { parseSeniorIdFromUser } from "../../services/homeApi";
+import { useEffect, useState } from "react";
+import { getLinkedSeniors } from "../../services/homeApi";
 import { T } from "../../styles/theme";
+import { getStoredAuthUser, setStoredAuthUser } from "../../utils/authStorage";
+import { parseLocalDateTime } from "../../utils/dateTime";
 
 function toPositiveInt(value) {
   if (typeof value === "number" && Number.isInteger(value) && value > 0) {
@@ -12,27 +15,74 @@ function toPositiveInt(value) {
   return null;
 }
 
+function readStoredAuthUser() {
+  return getStoredAuthUser();
+}
+
+function writeStoredAuthUser(user) {
+  setStoredAuthUser(user);
+}
+
+export function normalizeLinkedSenior(value) {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const seniorId = toPositiveInt(value.id)
+    || toPositiveInt(value.seniorId)
+    || toPositiveInt(value.linkedSeniorId);
+
+  return {
+    ...value,
+    id: seniorId,
+    seniorId,
+  };
+}
+
+export function normalizeLinkedSeniors(list) {
+  if (!Array.isArray(list)) {
+    return [];
+  }
+
+  return list
+    .map(normalizeLinkedSenior)
+    .filter((senior) => toPositiveInt(senior?.id));
+}
+
 export function getEffectiveFamilyUser(user) {
   if (user) {
     return user;
   }
-  try {
-    const raw = localStorage.getItem("cura_auth_user");
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch (_error) {
+  return readStoredAuthUser();
+}
+
+export function persistActiveFamilySenior(senior) {
+  const normalizedSenior = normalizeLinkedSenior(senior);
+  const seniorId = toPositiveInt(normalizedSenior?.id);
+  if (!seniorId) {
     return null;
   }
+
+  const storedUser = readStoredAuthUser() || {};
+  writeStoredAuthUser({
+    ...storedUser,
+    linkedSeniorId: seniorId,
+    linkedSenior: normalizedSenior,
+  });
+
+  return seniorId;
 }
 
 export function resolveFamilySeniorId(user) {
   const explicitCandidates = [
     user?.linkedSeniorId,
     user?.seniorId,
+    user?.linkedSenior?.id,
+    user?.linkedSenior?.seniorId,
     user?.linked_senior_id,
     user?.profile?.linkedSeniorId,
-    user?.linkedSenior?.id,
+    user?.profile?.linkedSenior?.id,
+    user?.profile?.linkedSenior?.seniorId,
   ];
 
   for (const candidate of explicitCandidates) {
@@ -42,7 +92,73 @@ export function resolveFamilySeniorId(user) {
     }
   }
 
-  return parseSeniorIdFromUser(user);
+  return null;
+}
+
+export function useFamilySeniorId(user) {
+  const [seniorId, setSeniorId] = useState(() => resolveFamilySeniorId(getEffectiveFamilyUser(user)));
+  const [isResolvingSenior, setIsResolvingSenior] = useState(() => !resolveFamilySeniorId(getEffectiveFamilyUser(user)));
+
+  useEffect(() => {
+    const effectiveUser = getEffectiveFamilyUser(user);
+    const explicitSeniorId = resolveFamilySeniorId(effectiveUser);
+    const role = String(effectiveUser?.role || "").trim().toLowerCase();
+
+    if (explicitSeniorId) {
+      setSeniorId(explicitSeniorId);
+      setIsResolvingSenior(false);
+      return undefined;
+    }
+
+    if (role !== "famille") {
+      setSeniorId(null);
+      setIsResolvingSenior(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    setIsResolvingSenior(true);
+
+    (async () => {
+      try {
+        const data = await getLinkedSeniors();
+        const seniors = normalizeLinkedSeniors(
+          Array.isArray(data?.seniors) ? data.seniors : Array.isArray(data) ? data : []
+        );
+        const nextSenior = seniors[0] || null;
+        const nextSeniorId = nextSenior ? persistActiveFamilySenior(nextSenior) : null;
+        if (!cancelled) {
+          setSeniorId(nextSeniorId);
+        }
+      } catch (_error) {
+        if (!cancelled) {
+          setSeniorId(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsResolvingSenior(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user,
+    user?.id,
+    user?.role,
+    user?.linkedSeniorId,
+    user?.linked_senior_id,
+    user?.linkedSenior?.id,
+    user?.linkedSenior?.seniorId,
+    user?.profile?.linkedSeniorId,
+    user?.profile?.linkedSenior?.id,
+    user?.profile?.linkedSenior?.seniorId,
+  ]);
+
+  return { seniorId, isResolvingSenior, setSeniorId };
 }
 
 export function getFamilyFirstName(value, fallback = "Famille") {
@@ -69,8 +185,8 @@ export function getMedicationStatusMeta(status) {
 
 export function formatFamilyTime(value) {
   if (!value) return "--:--";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
+  const parsed = parseLocalDateTime(value);
+  if (!parsed) {
     return String(value);
   }
   return parsed.toLocaleTimeString("fr-FR", {
@@ -81,8 +197,8 @@ export function formatFamilyTime(value) {
 
 export function formatFamilyDate(value) {
   if (!value) return "--";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
+  const parsed = parseLocalDateTime(value);
+  if (!parsed) {
     return String(value);
   }
   return parsed.toLocaleDateString("fr-FR", {
@@ -94,8 +210,8 @@ export function formatFamilyDate(value) {
 
 export function formatFamilyDateTime(value) {
   if (!value) return "--";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
+  const parsed = parseLocalDateTime(value);
+  if (!parsed) {
     return String(value);
   }
   return parsed.toLocaleString("fr-FR", {
@@ -113,8 +229,8 @@ export function normalizeAnswerLabel(value) {
 
 export function sortByDateDesc(list, getValue) {
   return [...list].sort((left, right) => {
-    const leftDate = new Date(getValue(left)).getTime();
-    const rightDate = new Date(getValue(right)).getTime();
+    const leftDate = parseLocalDateTime(getValue(left))?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const rightDate = parseLocalDateTime(getValue(right))?.getTime() ?? Number.NEGATIVE_INFINITY;
     return rightDate - leftDate;
   });
 }

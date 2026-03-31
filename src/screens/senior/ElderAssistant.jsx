@@ -10,6 +10,7 @@ import {
   triggerSos,
 } from "../../services/homeApi";
 import { formatDisplayFirstName } from "../../utils/nameFormat";
+import { getStoredAuthUser } from "../../utils/authStorage";
 
 const PAGE_BODY_FONT = "'DM Sans', sans-serif";
 const ASSISTANT_HEADER_FONT = PAGE_BODY_FONT;
@@ -241,12 +242,7 @@ export default function ElderAssistant({ onNavigate = () => {}, user = null }) {
 
   const effectiveUser = useMemo(() => {
     if (user) return user;
-    try {
-      const raw = localStorage.getItem("cura_auth_user");
-      return raw ? JSON.parse(raw) : null;
-    } catch (_error) {
-      return null;
-    }
+    return getStoredAuthUser();
   }, [user]);
 
   const seniorId = useMemo(() => parseSeniorIdFromUser(effectiveUser), [effectiveUser]);

@@ -4,6 +4,7 @@ import { Icon } from "../../components/icons/Icons";
 import { Phone } from "../../components/ui/Phone";
 import { BottomNav } from "../../components/senior/BottomNav";
 import { getSeniorMedications, parseSeniorIdFromUser } from "../../services/homeApi";
+import { getStoredAuthUser } from "../../utils/authStorage";
 
 const PAGE_BODY_FONT = "'DM Sans', sans-serif";
 const PAGE_TITLE_FONT = "'DM Serif Display', serif";
@@ -199,12 +200,7 @@ export default function ElderMedications({ onNavigate = () => {}, user = null })
     if (user) {
       return user;
     }
-    try {
-      const raw = localStorage.getItem("cura_auth_user");
-      return raw ? JSON.parse(raw) : null;
-    } catch (_error) {
-      return null;
-    }
+    return getStoredAuthUser();
   }, [user]);
 
   const seniorId = useMemo(() => parseSeniorIdFromUser(effectiveUser), [effectiveUser]);

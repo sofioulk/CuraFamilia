@@ -14,7 +14,7 @@ import {
 } from "../../services/homeApi";
 
 export const ROLES = [
-  { id: "famille", icon: <Icon.Users />, label: "Membre de la famille", desc: "Je gÃ¨re les mÃ©dicaments de mes proches Ã¢gÃ©s" },
+  { id: "famille", icon: <Icon.Users />, label: "Membre de la famille", desc: "Je gère les médicaments de mes proches âgés" },
   { id: "senior", icon: <Icon.Heart />, label: "Senior", desc: "Je suis la personne suivie par ma famille" },
 ];
 
@@ -64,7 +64,7 @@ function getNextReturnLabel(medications = []) {
 
   if (!firstTime) return "";
   const formattedTime = formatTimeSlotLabel(firstTime);
-  return formattedTime ? `Demain Ã  ${formattedTime}` : "Demain";
+  return formattedTime ? `Demain à ${formattedTime}` : "Demain";
 }
 
 function getTakeActionAvailabilityLabel(value) {
@@ -359,9 +359,11 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
     : null;
 
   const seniorFirstName = formatDisplayFirstName(homeData?.senior?.name || user?.name, "Senior");
-  const dailyQuestions = Array.isArray(homeData?.dailyQuestions) && homeData.dailyQuestions.length
-    ? homeData.dailyQuestions.slice(0, 2)
-    : (homeData?.dailyQuestion ? [homeData.dailyQuestion] : []);
+  const dailyQuestions = useMemo(() =>
+    Array.isArray(homeData?.dailyQuestions) && homeData.dailyQuestions.length
+      ? homeData.dailyQuestions.slice(0, 2)
+      : (homeData?.dailyQuestion ? [homeData.dailyQuestion] : []),
+  [homeData]);
   const activeDailyQuestion = useMemo(() => dailyQuestions
     .map((questionItem, questionIndex) => {
       const questionKey = String(questionItem?.question || `checkin-${questionIndex}`);
@@ -389,11 +391,11 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
   const homeGreeting = currentHour >= 18 || currentHour < 5 ? "Bonsoir" : "Bonjour";
   const nextMedicationTitle = nextMed
     ? nextMed.name
-    : (loadingHome ? "Chargement..." : (hasMedicationsToday ? "Toutes les prises complÃ©tÃ©es" : "Aucun mÃ©dicament prÃ©vu"));
+    : (loadingHome ? "Chargement..." : (hasMedicationsToday ? "Toutes les prises complétées" : "Aucun médicament prévu"));
   const nextMedicationDosage = normalizeDosage(nextMed?.dosage);
   const nextMedicationSubtitle = nextMed
     ? (nextMedicationDosage ? `${nextMedicationDosage} - ${nextMed.time}` : nextMed.time)
-    : (loadingHome ? "Veuillez patienter..." : (hasMedicationsToday ? "Toutes les prises du jour sont enregistrÃ©es." : "Aucun traitement Ã  prendre aujourd'hui."));
+    : (loadingHome ? "Veuillez patienter..." : (hasMedicationsToday ? "Toutes les prises du jour sont enregistrées." : "Aucun traitement à prendre aujourd'hui."));
   const minutesUntilNextMedication = getMinutesUntil(nextMed?.scheduledAt, nowTick);
   const canShowTakeMedicationButton = hasRemainingMedication
     && (minutesUntilNextMedication == null || minutesUntilNextMedication <= 30);
@@ -401,7 +403,7 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
     ? getTakeActionAvailabilityLabel(nextMed?.scheduledAt)
     : "";
   const nextMedicationInfoText = hasRemainingMedication
-    ? (loadingHome ? "Mise Ã  jour des prises..." : takeButtonAvailabilityLabel)
+    ? (loadingHome ? "Mise à jour des prises..." : takeButtonAvailabilityLabel)
     : "";
   const nextReturnLabel = getNextReturnLabel(meds);
   const nextMedicationCountdown = nextMed
@@ -411,17 +413,17 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
     ? 0
     : (remainingMedicationCount === 0 ? 3 : (takenMedicationCount > 0 ? 2 : 1));
   const heroProgressLabel = loadingHome
-    ? "Mise Ã  jour de votre journÃ©e..."
+    ? "Mise à jour de votre journée..."
     : (!hasMedicationsToday
-      ? "Aucun traitement prÃ©vu aujourd'hui."
+      ? "Aucun traitement prévu aujourd'hui."
       : `Prise ${takenMedicationCount} sur ${meds.length} aujourd'hui`);
   const homeSubtitle = hasMedicationsToday
     ? (remainingMedicationCount === 0
-      ? "Toutes vos prises du jour sont complÃ¨tes."
+      ? "Toutes vos prises du jour sont complètes."
       : `Vous avez ${remainingMedicationCount} prise${remainingMedicationCount > 1 ? "s" : ""} restante${remainingMedicationCount > 1 ? "s" : ""} aujourd'hui.`)
     : (currentHour < 12
-      ? "Prenons soin de votre journÃ©e, pas Ã  pas."
-      : "Aucune prise prÃ©vue aujourd'hui.");
+      ? "Prenons soin de votre journée, pas à pas."
+      : "Aucune prise prévue aujourd'hui.");
 
   const handleTakeMedication = async () => {
     if (!seniorId || !nextMed?.medicationId || takingMed) {
@@ -488,7 +490,7 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
         delete nextState[questionValue];
         return nextState;
       });
-      setActionError(error?.message || "Impossible d'envoyer la rÃ©ponse.");
+      setActionError(error?.message || "Impossible d'envoyer la réponse.");
     } finally {
       setSubmittingCheckinQuestion("");
     }
@@ -1046,7 +1048,7 @@ export default function ElderDashboard({ onNavigate = () => {}, user = null }) {
 
         <AppointmentCard appointment={appointment} loading={loadingHome} error={appointmentError} />
 
-        {actionError && (
+        {actionError && actionError !== appointmentError && (
           <p style={{ color: T.danger, fontSize: 12, fontWeight: 700, marginTop: 8 }}>
             {actionError}
           </p>

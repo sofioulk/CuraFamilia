@@ -1,7 +1,8 @@
+import { getStoredAuthToken } from "../utils/authStorage";
+
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "";
-const AUTH_TOKEN_KEY = "cura_auth_token";
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-const REQUEST_TIMEOUT_MS = Number.parseInt(process.env.REACT_APP_API_TIMEOUT_MS || "2200", 10);
+const REQUEST_TIMEOUT_MS = Number.parseInt(process.env.REACT_APP_API_TIMEOUT_MS || "8000", 10);
 
 function normalizeHostname(value) {
   return String(value || "").trim().toLowerCase();
@@ -101,11 +102,7 @@ function buildCandidateBaseUrls() {
 }
 
 function getStoredToken() {
-  try {
-    return localStorage.getItem(AUTH_TOKEN_KEY);
-  } catch (_error) {
-    return null;
-  }
+  return getStoredAuthToken();
 }
 
 function enrichMedicationsResponseFromHomeData(responseData, homeData, normalizedPeriod) {
@@ -250,6 +247,51 @@ export function parseSeniorIdFromUser(user) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function toPositiveInt(value) {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeLinkedSenior(value) {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const seniorId = toPositiveInt(value.id)
+    || toPositiveInt(value.seniorId)
+    || toPositiveInt(value.linkedSeniorId);
+
+  return {
+    ...value,
+    id: seniorId,
+    seniorId,
+  };
+}
+
+function normalizeLinkResponse(value) {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const normalized = { ...value };
+
+  if (Array.isArray(value.seniors)) {
+    normalized.seniors = value.seniors.map(normalizeLinkedSenior);
+  }
+
+  if (value.senior && typeof value.senior === "object") {
+    normalized.senior = normalizeLinkedSenior(value.senior);
+  }
+
+  return normalized;
+}
+
 export async function getSeniorHome({ seniorId, date } = {}) {
   if (!seniorId) {
     throw new Error("seniorId is required.");
@@ -377,7 +419,7 @@ export async function sendSeniorAssistantMessage({ seniorId, message, date } = {
 export async function generateLinkCode({ seniorId } = {}) {
   const body = {};
   if (seniorId) body.seniorId = seniorId;
-  return request("/api/links/generate", { method: "POST", body });
+  return normalizeLinkResponse(await request("/api/links/generate", { method: "POST", body }));
 }
 
 export async function getFamilyDashboard({ seniorId } = {}) {
@@ -412,4 +454,96 @@ export async function saveSeniorProfile({ seniorId, profileData } = {}) {
     method: "POST",
     body: profileData,
   });
+}
+
+export async function getSosHistory({ seniorId, limit = 20 } = {}) {
+  if (!seniorId) throw new Error("seniorId is required.");
+  const params = new URLSearchParams({ seniorId: String(seniorId), limit: String(limit) });
+  return request(`/api/family/sos/history?${params.toString()}`, { method: "GET" });
+}
+
+export async function acknowledgeSosAlert({ alertId } = {}) {
+  if (!alertId) throw new Error("alertId is required.");
+  return request(`/api/family/sos/${alertId}/acknowledge`, { method: "POST" });
+}
+
+export async function resolveSosAlert({ alertId } = {}) {
+  if (!alertId) throw new Error("alertId is required.");
+  return request(`/api/family/sos/${alertId}/resolve`, { method: "POST" });
+}
+
+export async function getAdherenceTrend({ seniorId, days = 7 } = {}) {
+  if (!seniorId) throw new Error("seniorId is required.");
+  const params = new URLSearchParams({ days: String(days) });
+  return request(`/api/family/seniors/${seniorId}/analytics/adherence?${params.toString()}`, { method: "GET" });
+}
+
+export async function getHealthScore({ seniorId } = {}) {
+  if (!seniorId) throw new Error("seniorId is required.");
+  return request(`/api/family/seniors/${seniorId}/analytics/health-score`, { method: "GET" });
+}
+
+export async function getLinkedSeniors() {
+  return normalizeLinkResponse(await request("/api/links/my-seniors", { method: "GET" }));
+}
+
+export async function verifyLinkCode({ code } = {}) {
+  if (!code) throw new Error("code is required.");
+  return normalizeLinkResponse(await request("/api/links/verify", { method: "POST", body: { code } }));
+}
+
+export async function useLinkCode({ code } = {}) {
+  if (!code) throw new Error("code is required.");
+  return normalizeLinkResponse(await request("/api/links/use", { method: "POST", body: { code } }));
+}
+
+export async function unlinkSenior({ seniorId } = {}) {
+  if (!seniorId) throw new Error("seniorId is required.");
+  return request(`/api/links/${seniorId}`, { method: "DELETE" });
+}
+
+export async function getSeniorApiProfile({ seniorId } = {}) {
+  if (!seniorId) throw new Error("seniorId is required.");
+  return request(`/api/senior/${seniorId}`, { method: "GET" });
+}
+
+export async function updateSeniorProfile({ seniorId, profileData } = {}) {
+  if (!seniorId || !profileData) throw new Error("seniorId and profileData are required.");
+  return request(`/api/senior/${seniorId}/profile`, { method: "PUT", body: profileData });
+}
+
+export async function createMedication({ seniorId, name, dosage, time, period, frequency, instruction } = {}) {
+  if (!seniorId || !name) throw new Error("seniorId and name are required.");
+  return request("/api/medications", { method: "POST", body: { seniorId, name, dosage, time, period, frequency, instruction } });
+}
+
+export async function updateMedication({ medicationId, ...fields } = {}) {
+  if (!medicationId) throw new Error("medicationId is required.");
+  return request(`/api/medications/${medicationId}`, { method: "PUT", body: fields });
+}
+
+export async function deleteMedication({ medicationId } = {}) {
+  if (!medicationId) throw new Error("medicationId is required.");
+  return request(`/api/medications/${medicationId}`, { method: "DELETE" });
+}
+
+export async function createAppointment({ seniorId, specialty, appointmentAt, doctorName, notes } = {}) {
+  if (!seniorId || !specialty) throw new Error("seniorId and specialty are required.");
+  return request("/api/appointments", { method: "POST", body: { seniorId, specialty, appointmentAt, doctorName, notes } });
+}
+
+export async function updateAppointment({ appointmentId, ...fields } = {}) {
+  if (!appointmentId) throw new Error("appointmentId is required.");
+  return request(`/api/appointments/${appointmentId}`, { method: "PUT", body: fields });
+}
+
+export async function deleteAppointment({ appointmentId } = {}) {
+  if (!appointmentId) throw new Error("appointmentId is required.");
+  return request(`/api/appointments/${appointmentId}`, { method: "DELETE" });
+}
+
+export async function getCheckinTrend({ seniorId, days = 7 } = {}) {
+  if (!seniorId) throw new Error("seniorId is required.");
+  const params = new URLSearchParams({ days: String(days) });
+  return request(`/api/family/seniors/${seniorId}/analytics/checkins?${params.toString()}`, { method: "GET" });
 }

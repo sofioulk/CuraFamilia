@@ -16,26 +16,11 @@ import FamilyAssistant from "./screens/family/FamilyAssistant";
 import FamilyCalendar from "./screens/family/FamilyCalendar";
 import FamilySettings from "./screens/family/FamilySettings";
 import { SeniorFloatingSos } from "./components/senior/SeniorFloatingSos";
-
-const AUTH_TOKEN_KEY = "cura_auth_token";
-const AUTH_USER_KEY = "cura_auth_user";
+import { getStoredAuthSession, setStoredAuthSession } from "./utils/authStorage";
 const AUTO_RESTORE_SESSION = process.env.REACT_APP_AUTO_RESTORE_SESSION === "true";
 
 function restoreSession() {
-  try {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    const rawUser = localStorage.getItem(AUTH_USER_KEY);
-    if (!token || !rawUser) {
-      return null;
-    }
-    const user = JSON.parse(rawUser);
-    if (!user || typeof user !== "object") {
-      return null;
-    }
-    return { token, user };
-  } catch (_error) {
-    return null;
-  }
+  return getStoredAuthSession();
 }
 
 /**
@@ -56,12 +41,7 @@ export default function App() {
   const handleAuthSuccess = (authData) => {
     const nextUser = authData?.user || authData;
     setUser(nextUser);
-    if (nextUser) {
-      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(nextUser));
-    }
-    if (authData?.token) {
-      localStorage.setItem(AUTH_TOKEN_KEY, authData.token);
-    }
+    setStoredAuthSession({ token: authData?.token || null, user: nextUser || null });
     setScreen("success");
   };
 

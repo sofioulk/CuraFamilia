@@ -1,5 +1,6 @@
+import { getStoredAuthToken } from "../utils/authStorage";
+
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "";
-const AUTH_TOKEN_KEY = "cura_auth_token";
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
 function normalizeHostname(value) {
@@ -36,11 +37,7 @@ function getFriendlyUnavailableMessage() {
 }
 
 function getStoredToken() {
-  try {
-    return localStorage.getItem(AUTH_TOKEN_KEY);
-  } catch (_error) {
-    return null;
-  }
+  return getStoredAuthToken();
 }
 
 function buildHeaders() {

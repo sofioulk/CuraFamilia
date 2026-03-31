@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSeniorHome, parseSeniorIdFromUser, triggerSos } from "../../services/homeApi";
 import { T } from "../../styles/theme";
+import { getStoredAuthUser } from "../../utils/authStorage";
 
 const SOS_BUTTON_COLOR = "#E05C2A";
 const BODY_FONT = "'DM Sans', sans-serif";
@@ -9,12 +10,7 @@ const BANNER_VISIBILITY_WINDOW_MS = 30 * 60 * 1000;
 const ALERT_REFRESH_INTERVAL_MS = 5000;
 
 function getStoredUser() {
-  try {
-    const raw = localStorage.getItem("cura_auth_user");
-    return raw ? JSON.parse(raw) : null;
-  } catch (_error) {
-    return null;
-  }
+  return getStoredAuthUser();
 }
 
 function getCountdownColor(seconds) {

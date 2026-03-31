@@ -1,17 +1,22 @@
 import { T } from "../../styles/theme";
+import { parseLocalDateTime } from "../../utils/dateTime";
 
 function formatAppointmentDate(value) {
   if (!value) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
+  const parsed = parseLocalDateTime(value);
+  if (!parsed) return "";
 
-  return parsed.toLocaleString("fr-FR", {
+  const datePart = parsed.toLocaleDateString("fr-FR", {
     day: "2-digit",
     month: "long",
     year: "numeric",
+  });
+  const timePart = parsed.toLocaleTimeString("fr-FR", {
     hour: "2-digit",
     minute: "2-digit",
   }).replace(":", "h");
+
+  return `${datePart} à ${timePart}`;
 }
 
 export function AppointmentCard({ appointment = null, loading = false, error = "" }) {
